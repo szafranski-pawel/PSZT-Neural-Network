@@ -60,7 +60,7 @@ class HiddenActivationFunc:
         return np.maximum(0, input)
     
     def back(self, output):     
-        return output * (self.old_input.T > 0)
+        return output * (self.old_input > 0)
 
 # Sigmoid
 class OutputActivationFunc:
@@ -85,9 +85,8 @@ def lossGradient(predicted, correct):
     return - correct / predictions
 
 def scoreFunction(predicted, correct):
-    predicted_vec = n[0:, 0]
-    correct_vec = n[0:, 0]
-    return np.mean(predicted_vec == correct_vec)
+    predicted_vec = predicted[0:, 0]
+    return np.mean(predicted_vec == correct)
 
 ##############################
 # Neural model
@@ -100,15 +99,15 @@ class Model:
         # Add all layers except the last one
         for i in range(len(layersSizes) - 1):
             self.layers.append(FullLayer(layersSizes[i], layersSizes[i+1], learnRate))
-            if i == len(layersSizes) - 1:
+            if i == len(layersSizes) - 2:
                 self.layers.append(OutputActivationFunc())
             else:
                 self.layers.append(HiddenActivationFunc())
 
     @staticmethod
     def _union_shuffle(a, b):
-        result_a = np.empty(a.shape)
-        result_b = np.empty(b.shape)
+        result_a = np.empty(a.shape, dtype=a.dtype)
+        result_b = np.empty(b.shape, dtype=b.dtype)
         for old_idx, new_idx in enumerate(np.random.permutation(len(a))):
             result_a[new_idx], result_b[new_idx] = a[old_idx], b[new_idx]
         return result_a, result_b
@@ -122,7 +121,7 @@ class Model:
         xTrain, yTrain = input[:trainSize], output[:trainSize]
         xValid, yValid = input[trainSize:], output[trainSize:]
 
-        for _ in range(epochs):
+        for currentEpoch in range(epochs):
             xTrain, yTrain = Model._union_shuffle(xTrain, yTrain)
 
             xParts = [xTrain[i : i + batchSize] for i in range(0, len(xTrain), batchSize)]
@@ -140,9 +139,12 @@ class Model:
                 for layer in reversed(self.layers):
                     grad = layer.back(grad)
             
+            loss = np.mean(eachPartLoss)
+            score = self.score(xValid, yValid)
+            info(f"\t Done {currentEpoch}/{epochs} - score ({score}), loss ({loss})")
             results.append({
-                'loss': np.mean(eachPartLoss),
-                'score': self.score(xValid, yValid),
+                'loss': loss,
+                'score': score,
             })
         return results
 
@@ -186,8 +188,10 @@ def main():
     info("Setting up model")
     model = Model(xSize, ySize, args.neurons, args.learn_rate)
 
-    info("Starting training")
-    results = model.train(xData, yData, 1000, 100, 0.1)
+    info("Training...")
+    info("(This might take a while - better get yourself a beer)")
+    results = model.train(xData, yData, 100, 5, 0.2)
+    print(results)
 
 if __name__ == "__main__":
     main()
