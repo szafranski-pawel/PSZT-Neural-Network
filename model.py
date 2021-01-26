@@ -2,6 +2,7 @@
 import random
 import numpy as np
 import pandas
+import argparse
 
 ##############################
 # Loggers
@@ -61,18 +62,17 @@ class HiddenActivationFunc:
     def back(self, output):     
         return output * (self.old_input > 0)
 
-# simple binary (1 for x>=0 and 0 for x<0)
+# Sigmoid
 class OutputActivationFunc:
     def __init__(self):
         pass
     
     def feed(self, input):
         self.old_input = input
-        x = np.where(input >= 0, 1, 0)
-        return input * x
+        return 1/(1+np.exp(-input))
     
     def back(self, output):      
-        return output * 0
+        return (1/(1+np.exp(-output))) * (1 - 1/(1+np.exp(-output)))
 
 ##############################
 # Neural model
@@ -112,10 +112,15 @@ class Model:
 # Data load and entry point
 ##############################
 def main():
-    dataset = pandas.read_csv('dane.csv', delimiter=';')
-    print(dataset.sample(5))
-    print(dataset.info())
-    model = Model(26, 1, [5, 5], 0.1)
+    parser = argparse.ArgumentParser(description='Perceptron classification')
+    parser.add_argument('--file_path', type=str, default='dane.csv', help='Path to training set')
+    parser.add_argument('--delimiter', type=str, default=';', help='Path to training set')
+    parser.add_argument('--learn_rate', type=float, default=0.9, help='Learn rate')
+    parser.add_argument('--neurons', type=int, nargs='+', help='Neurons configuration')
+    args = parser.parse_args()
+
+    dataset = pandas.read_csv(args.file_path, args.delimiter)
+    model = Model(len(dataset.columns), 1, args.neurons, args.learn_rate)
 
 if __name__ == "__main__":
     main()
