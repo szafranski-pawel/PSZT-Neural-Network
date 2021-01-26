@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import random
 import numpy as np
+import pandas
 
 ##############################
 # Loggers
@@ -102,6 +103,9 @@ class Model:
 # Data load and entry point
 ##############################
 def main():
+    dataset = pandas.read_csv('dane.csv', delimiter=';')
+    print(dataset.sample(5))
+    print(dataset.info())
     model = Model(26, 1, [5, 5], 0.1)
 
 if __name__ == "__main__":
