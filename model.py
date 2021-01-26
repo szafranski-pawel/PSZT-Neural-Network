@@ -60,11 +60,12 @@ class HiddenActivationFunc:
         return np.maximum(0, input)
     
     def back(self, output):     
-        return output * (self.old_input > 0)
+        return output * (self.old_input > 0).T
 
 # Sigmoid
 class OutputActivationFunc:
     def feed(self, input):
+        input = np.clip(input, -10, 10)
         self.old_input = input
         return 1/(1+np.exp(-input))
     
@@ -79,17 +80,17 @@ class OutputActivationFunc:
 def lossFunction(predicted, correct):
     predictions = np.clip(predicted, sys.float_info.epsilon, 1.0 - sys.float_info.epsilon)
     batch_size = predictions.shape[0]
-    ce = -np.sum(correct * np.log(predictions)) / batch_size
+    ce = -np.sum(correct * np.log(predictions) + (1-correct) * np.log(1 - predictions)) / batch_size
     return ce
 
 def lossGradient(predicted, correct):
     predictions = np.clip(predicted, sys.float_info.epsilon, 1.0 - sys.float_info.epsilon)
     predictions = np.asarray(predictions).reshape(-1)
-    return - correct / predictions
+    return - correct / predictions + (1-correct) / (1 - predictions)
 
 def scoreFunction(predicted, correct):
     predicted_vec = predicted[0:, 0]
-    return np.mean(predicted_vec == correct)
+    return np.mean((predicted_vec > 0.5) == correct)
 
 ##############################
 # Neural model
@@ -125,7 +126,6 @@ class Model:
         xValid, yValid = input[trainSize:], output[trainSize:]
 
         for currentEpoch in range(epochs):
-            print(xTrain, yTrain)
             xTrain, yTrain = Model._union_shuffle(xTrain, yTrain)
 
             xParts = [xTrain[i : i + batchSize] for i in range(0, len(xTrain), batchSize)]
@@ -150,7 +150,6 @@ class Model:
                 'loss': loss,
                 'score': score,
             })
-            exit(1)
         return results
 
     def predict(self, input):
@@ -187,8 +186,8 @@ def main():
     print(dataset.info())
 
     xSize, ySize = len(dataset.columns) - 1, 1
-    xData = dataset.values[0:10, :len(dataset.columns) - 1]
-    yData = dataset.values[0:10, len(dataset.columns) - 1]
+    xData = dataset.values[0:, :len(dataset.columns) - 1]
+    yData = dataset.values[0:, len(dataset.columns) - 1]
 
     info("Setting up model")
     print(xSize, ySize, len(xData), len(yData))
