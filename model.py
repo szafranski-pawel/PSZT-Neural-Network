@@ -68,8 +68,10 @@ class OutputActivationFunc:
         self.old_input = input
         return 1/(1+np.exp(-input))
     
-    def back(self, output):      
-        return (1/(1+np.exp(-output))) * (1 - 1/(1+np.exp(-output)))
+    def back(self, output):
+        old_input = np.asarray(self.old_input).reshape(-1)
+        result = output * (1/(1+np.exp(-old_input))) * (1 - 1/(1+np.exp(-old_input)))
+        return np.asmatrix(result).T
 
 ##############################
 # Score functions
@@ -82,6 +84,7 @@ def lossFunction(predicted, correct):
 
 def lossGradient(predicted, correct):
     predictions = np.clip(predicted, sys.float_info.epsilon, 1.0 - sys.float_info.epsilon)
+    predictions = np.asarray(predictions).reshape(-1)
     return - correct / predictions
 
 def scoreFunction(predicted, correct):
@@ -109,7 +112,7 @@ class Model:
         result_a = np.empty(a.shape, dtype=a.dtype)
         result_b = np.empty(b.shape, dtype=b.dtype)
         for old_idx, new_idx in enumerate(np.random.permutation(len(a))):
-            result_a[new_idx], result_b[new_idx] = a[old_idx], b[new_idx]
+            result_a[new_idx], result_b[new_idx] = a[old_idx], b[old_idx]
         return result_a, result_b
 
     def train(self, input, output, epochs, batchSize, validation_split):
@@ -122,6 +125,7 @@ class Model:
         xValid, yValid = input[trainSize:], output[trainSize:]
 
         for currentEpoch in range(epochs):
+            print(xTrain, yTrain)
             xTrain, yTrain = Model._union_shuffle(xTrain, yTrain)
 
             xParts = [xTrain[i : i + batchSize] for i in range(0, len(xTrain), batchSize)]
@@ -146,6 +150,7 @@ class Model:
                 'loss': loss,
                 'score': score,
             })
+            exit(1)
         return results
 
     def predict(self, input):
@@ -182,10 +187,11 @@ def main():
     print(dataset.info())
 
     xSize, ySize = len(dataset.columns) - 1, 1
-    xData = dataset.values[0:, :len(dataset.columns) - 1]
-    yData = dataset.values[0:, len(dataset.columns) - 1]
+    xData = dataset.values[0:10, :len(dataset.columns) - 1]
+    yData = dataset.values[0:10, len(dataset.columns) - 1]
 
     info("Setting up model")
+    print(xSize, ySize, len(xData), len(yData))
     model = Model(xSize, ySize, args.neurons, args.learn_rate)
 
     info("Training...")
