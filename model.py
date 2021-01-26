@@ -168,7 +168,7 @@ def main():
     parser.add_argument('--file_path', type=str, default='dane.csv', help='Path to training set')
     parser.add_argument('--delimiter', type=str, default=';', help='Path to training set')
     parser.add_argument('--learn_rate', type=float, default=0.9, help='Learn rate')
-    parser.add_argument('--neurons', type=int, nargs='+', help='Neurons configuration')
+    parser.add_argument('--neurons', type=int, nargs='+', default=[], help='Neurons configuration')
     args = parser.parse_args()
 
     info(f"Loading data from {args.file_path}")
@@ -179,11 +179,12 @@ def main():
     info("Data file format info:")
     print(dataset.info())
 
+    xSize, ySize = len(dataset.columns) - 1, 1
     xData = dataset.values[0:, :len(dataset.columns) - 1]
     yData = dataset.values[0:, len(dataset.columns) - 1]
 
     info("Setting up model")
-    model = Model(len(xData), len(yData), args.neurons, args.learn_rate)
+    model = Model(xSize, ySize, args.neurons, args.learn_rate)
 
     info("Starting training")
     results = model.train(xData, yData, 1000, 100, 0.1)
