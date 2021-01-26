@@ -25,12 +25,12 @@ def info(*args):
 # Neural layers
 ##############################
 class FullLayer:
-    # Implementation of layer in which all nodes are connected
+    # Implementation of layer in which all nodes from previous layer are connected to every node in next layer
     def __init__(self, inputCnt, outputCnt, learnRate):
         self.weights = np.matrix([
             [random.uniform(-1, 1) for _ in range(inputCnt)] for _ in range(outputCnt)
         ])
-        
+        # create vector of random biases
         self.biases = np.array([random.uniform(-1, 1) for _ in range(outputCnt)])
         self.learnRate = learnRate
 
@@ -49,23 +49,33 @@ class FullLayer:
 
         return grad
 
-class ActivationFunc:
+# reLU
+class HiddenActivationFunc:
     def __init__(self):
         pass
     
     def feed(self, input):
         self.old_input = input
-        # TODO: Activate
-
-        return input
+        return np.maximum(0, input)
     
-    def back(self, output):
-        # TODO: Activate
-        
-        raise output
+    def back(self, output):     
+        return output * (self.old_input > 0)
+
+# simple binary (1 for x>=0 and 0 for x<0)
+class OutputActivationFunc:
+    def __init__(self):
+        pass
+    
+    def feed(self, input):
+        self.old_input = input
+        x = np.where(input >= 0, 1, 0)
+        return input * x
+    
+    def back(self, output):      
+        return output * 0
 
 ##############################
-# Nerual model
+# Neural model
 ##############################
 class Model:
     def __init__(self, inputCnt, outputCnt, hiddenCnts, learnRate):
@@ -76,10 +86,9 @@ class Model:
         for i in range(len(layersSizes) - 1):
             self.layers.append(FullLayer(layersSizes[i], layersSizes[i+1], learnRate))
             if i == len(layersSizes) - 1:
-                # TODO: Other activator for last layer
-                self.layers.append(ActivationFunc())
+                self.layers.append(OutputActivationFunc())
             else:
-                self.layers.append(ActivationFunc())
+                self.layers.append(HiddenActivationFunc())
 
     def train():
         pass
