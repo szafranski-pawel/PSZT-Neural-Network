@@ -6,6 +6,8 @@ import pandas
 import argparse
 import sys
 
+from scipy import stats
+
 
 ##############################
 # Loggers
@@ -31,11 +33,15 @@ def info(*args):
 class FullLayer:
     # Implementation of layer in which all nodes from previous layer are connected to every node in next layer
     def __init__(self, inputCnt, outputCnt, learnRate):
+        center = 0
+        lower, upper = -1, 1
+        sigma = 1
+        norm_dist = stats.truncnorm((lower - center) / sigma, (upper - center) / sigma, loc=center, scale=sigma)
         self.weights = np.matrix([
-            [random.uniform(0, 1) for _ in range(outputCnt)] for _ in range(inputCnt)
+            [norm_dist.rvs() for _ in range(outputCnt)] for _ in range(inputCnt)
         ])
         # create vector of random biases
-        self.biases = np.array([random.uniform(-1, 1) for _ in range(outputCnt)])
+        self.biases = np.array([norm_dist.rvs() for _ in range(outputCnt)])
         self.learnRate = learnRate
 
     def feed(self, input):
@@ -57,10 +63,10 @@ class FullLayer:
 class HiddenActivationFunc:    
     def feed(self, input):
         self.old_input = input
-        return np.maximum(0, input)
+        return np.maximum(0.01 * input, input)
     
     def back(self, output):
-        return np.asarray(output) * np.asarray(self.old_input > 0)
+        return np.asarray(output) * np.asarray(np.where(self.old_input > 0, 1, 0.01))
 
 # Sigmoid
 class OutputActivationFunc:
@@ -146,11 +152,12 @@ class Model:
             
             loss = np.mean(eachPartLoss)
             score = self.score(xValid, yValid)
-            print(self.score(xTrain, yTrain))
-            info(f"\t Done {currentEpoch}/{epochs} - score ({score}), loss ({loss})")
+            loss_on_val = self.verify(xValid, yValid)
+            info(f"\t Done {currentEpoch}/{epochs} - score ({score}), loss ({loss}), loss_on_val ({loss_on_val})")
             results.append({
                 'loss': loss,
                 'score': score,
+                'loss_on_val': loss_on_val,
             })
         return results
 
@@ -187,7 +194,7 @@ def main():
     info("Data file format info:")
     print(dataset.info())
 
-    DATA_SIZE = 1000      # -1 for full
+    DATA_SIZE = 30000      # -1 for full
 
     xSize, ySize = len(dataset.columns) - 1, 1
     xData = dataset.values[0:DATA_SIZE, :len(dataset.columns) - 1]
@@ -212,7 +219,18 @@ def main():
 
     info("Training...")
     info("(This might take a while - better get yourself a beer)")
-    results = model.train(newxData, yData, 100, 2, 0.8)
+    results = model.train(newxData, yData, 100, 5, 0.7)
+
+    info("Dumping to file...")
+    with open("results.csv", "w") as f:
+        for i, line in enumerate(results):
+            if i == 0:
+                f.write(";".join(line.keys()))
+                f.write('\n')
+            f.write(";".join([str(x) for x in line.values()]))
+            f.write('\n')
+
+    info("Finished. Have a nice day!")
 
 if __name__ == "__main__":
     main()
