@@ -2,7 +2,6 @@
 import argparse
 import numpy as np
 import pandas
-import random
 import sys
 
 from scipy import stats
