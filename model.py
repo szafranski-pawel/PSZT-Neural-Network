@@ -6,6 +6,8 @@ import pandas
 import argparse
 import sys
 
+from scipy import stats
+
 
 ##############################
 # Loggers
@@ -31,11 +33,15 @@ def info(*args):
 class FullLayer:
     # Implementation of layer in which all nodes from previous layer are connected to every node in next layer
     def __init__(self, inputCnt, outputCnt, learnRate):
+        center = 0
+        lower, upper = -1, 1
+        sigma = 1
+        norm_dist = stats.truncnorm((lower - center) / sigma, (upper - center) / sigma, loc=center, scale=sigma)
         self.weights = np.matrix([
-            [random.uniform(-1, 1) for _ in range(outputCnt)] for _ in range(inputCnt)
+            [norm_dist.rvs() for _ in range(outputCnt)] for _ in range(inputCnt)
         ])
         # create vector of random biases
-        self.biases = np.array([random.uniform(-1, 1) for _ in range(outputCnt)])
+        self.biases = np.array([norm_dist.rvs() for _ in range(outputCnt)])
         self.learnRate = learnRate
 
     def feed(self, input):
@@ -57,19 +63,23 @@ class FullLayer:
 class HiddenActivationFunc:    
     def feed(self, input):
         self.old_input = input
-        return np.maximum(0, input)
+        return np.maximum(0.01 * input, input)
     
-    def back(self, output):     
-        return output * (self.old_input > 0)
+    def back(self, output):
+        return np.asarray(output) * np.asarray(np.where(self.old_input > 0, 1, 0.01))
 
 # Sigmoid
 class OutputActivationFunc:
     def feed(self, input):
+        input = np.clip(input, -10, 10)
         self.old_input = input
         return 1/(1+np.exp(-input))
     
-    def back(self, output):      
-        return (1/(1+np.exp(-output))) * (1 - 1/(1+np.exp(-output)))
+    def back(self, output):
+        old_input = np.asarray(self.old_input).reshape(-1)
+        old_input = np.clip(old_input, -10, 10)
+        result = output * (1/(1+np.exp(-old_input))) * (1 - 1/(1+np.exp(-old_input)))
+        return np.asmatrix(result).T
 
 ##############################
 # Score functions
@@ -77,16 +87,17 @@ class OutputActivationFunc:
 def lossFunction(predicted, correct):
     predictions = np.clip(predicted, sys.float_info.epsilon, 1.0 - sys.float_info.epsilon)
     batch_size = predictions.shape[0]
-    ce = -np.sum(correct * np.log(predictions)) / batch_size
+    ce = -np.sum(correct * np.log(predictions) + (1-correct) * np.log(1 - predictions)) / batch_size
     return ce
 
 def lossGradient(predicted, correct):
     predictions = np.clip(predicted, sys.float_info.epsilon, 1.0 - sys.float_info.epsilon)
-    return - correct / predictions
+    predictions = np.asarray(predictions).reshape(-1)
+    return - correct / predictions + (1-correct) / (1 - predictions)
 
 def scoreFunction(predicted, correct):
     predicted_vec = predicted[0:, 0]
-    return np.mean(predicted_vec == correct)
+    return np.mean((predicted_vec > 0.5) == correct)
 
 ##############################
 # Neural model
@@ -109,7 +120,7 @@ class Model:
         result_a = np.empty(a.shape, dtype=a.dtype)
         result_b = np.empty(b.shape, dtype=b.dtype)
         for old_idx, new_idx in enumerate(np.random.permutation(len(a))):
-            result_a[new_idx], result_b[new_idx] = a[old_idx], b[new_idx]
+            result_a[new_idx], result_b[new_idx] = a[old_idx], b[old_idx]
         return result_a, result_b
 
     def train(self, input, output, epochs, batchSize, validation_split):
@@ -141,10 +152,12 @@ class Model:
             
             loss = np.mean(eachPartLoss)
             score = self.score(xValid, yValid)
-            info(f"\t Done {currentEpoch}/{epochs} - score ({score}), loss ({loss})")
+            loss_on_val = self.verify(xValid, yValid)
+            info(f"\t Done {currentEpoch}/{epochs} - score ({score}), loss ({loss}), loss_on_val ({loss_on_val})")
             results.append({
                 'loss': loss,
                 'score': score,
+                'loss_on_val': loss_on_val,
             })
         return results
 
@@ -169,7 +182,7 @@ def main():
     parser = argparse.ArgumentParser(description='Perceptron classification')
     parser.add_argument('--file_path', type=str, default='dane.csv', help='Path to training set')
     parser.add_argument('--delimiter', type=str, default=';', help='Path to training set')
-    parser.add_argument('--learn_rate', type=float, default=0.9, help='Learn rate')
+    parser.add_argument('--learn_rate', type=float, default=0.1, help='Learn rate')
     parser.add_argument('--neurons', type=int, nargs='+', default=[], help='Neurons configuration')
     args = parser.parse_args()
 
@@ -181,17 +194,43 @@ def main():
     info("Data file format info:")
     print(dataset.info())
 
+    DATA_SIZE = 30000      # -1 for full
+
     xSize, ySize = len(dataset.columns) - 1, 1
-    xData = dataset.values[0:, :len(dataset.columns) - 1]
-    yData = dataset.values[0:, len(dataset.columns) - 1]
+    xData = dataset.values[0:DATA_SIZE, :len(dataset.columns) - 1]
+    yData = dataset.values[0:DATA_SIZE, len(dataset.columns) - 1]
+
+    newxData = []
+    for i in range(xSize):
+        row = xData[0:, i]
+        maxVal = np.amax(row)
+        minVal = np.amin(row)
+        diff = maxVal - minVal
+        newRow = np.empty(len(row))
+        for j in range(len(newRow)):
+            newRow[j] = float(row[j] - minVal) / float(diff)
+        newxData += [newRow]
+    newxData = np.array(newxData).T
+
 
     info("Setting up model")
+    print(xSize, ySize, len(xData), len(yData))
     model = Model(xSize, ySize, args.neurons, args.learn_rate)
 
     info("Training...")
     info("(This might take a while - better get yourself a beer)")
-    results = model.train(xData, yData, 100, 5, 0.2)
-    print(results)
+    results = model.train(newxData, yData, 100, 5, 0.7)
+
+    info("Dumping to file...")
+    with open("results.csv", "w") as f:
+        for i, line in enumerate(results):
+            if i == 0:
+                f.write(";".join(line.keys()))
+                f.write('\n')
+            f.write(";".join([str(x) for x in line.values()]))
+            f.write('\n')
+
+    info("Finished. Have a nice day!")
 
 if __name__ == "__main__":
     main()
