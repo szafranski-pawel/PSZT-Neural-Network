@@ -71,6 +71,7 @@ class OutputActivationFunc:
     
     def back(self, output):
         old_input = np.asarray(self.old_input).reshape(-1)
+        old_input = np.clip(old_input, -10, 10)
         result = output * (1/(1+np.exp(-old_input))) * (1 - 1/(1+np.exp(-old_input)))
         return np.asmatrix(result).T
 
@@ -145,7 +146,7 @@ class Model:
             
             loss = np.mean(eachPartLoss)
             score = self.score(xValid, yValid)
-            #print(xValid, self.predict(xValid), yValid)
+            print(self.score(xTrain, yTrain))
             info(f"\t Done {currentEpoch}/{epochs} - score ({score}), loss ({loss})")
             results.append({
                 'loss': loss,
@@ -174,8 +175,8 @@ def main():
     parser = argparse.ArgumentParser(description='Perceptron classification')
     parser.add_argument('--file_path', type=str, default='dane.csv', help='Path to training set')
     parser.add_argument('--delimiter', type=str, default=';', help='Path to training set')
-    parser.add_argument('--learn_rate', type=float, default=0.9, help='Learn rate')
-    parser.add_argument('--neurons', type=int, nargs='+', default=[2], help='Neurons configuration')
+    parser.add_argument('--learn_rate', type=float, default=0.1, help='Learn rate')
+    parser.add_argument('--neurons', type=int, nargs='+', default=[], help='Neurons configuration')
     args = parser.parse_args()
 
     info(f"Loading data from {args.file_path}")
@@ -186,11 +187,24 @@ def main():
     info("Data file format info:")
     print(dataset.info())
 
-    DATA_SIZE = 10      # -1 for full
+    DATA_SIZE = 1000      # -1 for full
 
     xSize, ySize = len(dataset.columns) - 1, 1
     xData = dataset.values[0:DATA_SIZE, :len(dataset.columns) - 1]
     yData = dataset.values[0:DATA_SIZE, len(dataset.columns) - 1]
+
+    newxData = []
+    for i in range(xSize):
+        row = xData[0:, i]
+        maxVal = np.amax(row)
+        minVal = np.amin(row)
+        diff = maxVal - minVal
+        newRow = np.empty(len(row))
+        for j in range(len(newRow)):
+            newRow[j] = float(row[j] - minVal) / float(diff)
+        newxData += [newRow]
+    newxData = np.array(newxData).T
+
 
     info("Setting up model")
     print(xSize, ySize, len(xData), len(yData))
@@ -198,7 +212,7 @@ def main():
 
     info("Training...")
     info("(This might take a while - better get yourself a beer)")
-    results = model.train(xData, yData, 100, 5, 0.1)
+    results = model.train(newxData, yData, 100, 2, 0.8)
 
 if __name__ == "__main__":
     main()
