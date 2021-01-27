@@ -3,7 +3,6 @@ import argparse
 import random
 import numpy as np
 import pandas
-import argparse
 import sys
 
 from scipy import stats
