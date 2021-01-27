@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import random
 import numpy as np
 import pandas
 import sys
@@ -35,10 +34,12 @@ class FullLayer:
         center = 0
         lower, upper = -1, 1
         sigma = 1
+
         norm_dist = stats.truncnorm((lower - center) / sigma, (upper - center) / sigma, loc=center, scale=sigma)
         self.weights = np.matrix([
             [norm_dist.rvs() for _ in range(outputCnt)] for _ in range(inputCnt)
         ])
+
         # create vector of random biases
         self.biases = np.array([norm_dist.rvs() for _ in range(outputCnt)])
         self.learnRate = learnRate
@@ -48,9 +49,10 @@ class FullLayer:
         return np.dot(input, self.weights) + self.biases
 
     def back(self, output):
+        old_input = self.old_input.T
         grad = np.dot(output, self.weights.T)
 
-        grad_weights = np.dot(self.old_input.T, output)
+        grad_weights = np.dot(old_input, output)
         self.weights = self.weights - self.learnRate * grad_weights
 
         grad_biases = output.mean(axis=0) * self.old_input.shape[0]
@@ -58,7 +60,7 @@ class FullLayer:
 
         return grad
 
-# reLU
+# Leaky reLU
 class HiddenActivationFunc:    
     def feed(self, input):
         self.old_input = input
@@ -83,14 +85,18 @@ class OutputActivationFunc:
 ##############################
 # Score functions
 ##############################
+
+# Use custom epsilon (instead of sys.float_info.epsilon) to avoid awful math errors
+#  caused by limited precision of floats
+bigger_epsilon = 1e-6
+
 def lossFunction(predicted, correct):
-    predictions = np.clip(predicted, sys.float_info.epsilon, 1.0 - sys.float_info.epsilon)
-    batch_size = predictions.shape[0]
-    ce = -np.sum(correct * np.log(predictions) + (1-correct) * np.log(1 - predictions)) / batch_size
-    return ce
+    predictions = np.clip(predicted, bigger_epsilon, 1.0 - bigger_epsilon)
+    size = predictions.shape[0]
+    return -np.sum(correct * np.log(predictions) + (1-correct) * np.log(1 - predictions)) / size
 
 def lossGradient(predicted, correct):
-    predictions = np.clip(predicted, sys.float_info.epsilon, 1.0 - sys.float_info.epsilon)
+    predictions = np.clip(predicted, bigger_epsilon, 1.0 - bigger_epsilon)
     predictions = np.asarray(predictions).reshape(-1)
     return - correct / predictions + (1-correct) / (1 - predictions)
 
@@ -151,14 +157,16 @@ class Model:
             
             loss = np.mean(eachPartLoss)
             score = self.score(xValid, yValid)
-            self.TF(xValid, yValid)
             loss_on_val = self.verify(xValid, yValid)
-            info(f"\t Done {currentEpoch}/{epochs} - score ({score}), loss ({loss}), loss_on_val ({loss_on_val})")
+
+            self.TF(xValid, yValid)
             results.append({
                 'loss': loss,
                 'score': score,
                 'loss_on_val': loss_on_val,
             })
+
+            info(f"\t Done {currentEpoch}/{epochs} - score ({score}), loss ({loss}), loss_on_val ({loss_on_val})")
         return results
 
     def predict(self, input):
@@ -187,35 +195,39 @@ class Model:
                 TN += 1
             elif predicted_vec[i] <= 0.5 and correct[i] == 1:
                 FN += 1
-        print('TP: {}, FP: {}, TN: {}, FN: {}'.format(TP,FP,TN,FN))
+        info('\tTP: {}, FP: {}, TN: {}, FN: {}'.format(TP,FP,TN,FN))
         return
     
 
 ##############################
 # Data load and entry point
 ##############################
+# Useful constants for debugging
+DATA_SIZE = -1              # -1 for full
+VALIDATION_SPLIT = 0.7
+
 def main():
     parser = argparse.ArgumentParser(description='Perceptron classification')
     parser.add_argument('--file_path', type=str, default='dane.csv', help='Path to training set')
-    parser.add_argument('--delimiter', type=str, default=';', help='Path to training set')
     parser.add_argument('--learn_rate', type=float, default=0.1, help='Learn rate')
     parser.add_argument('--neurons', type=int, nargs='+', default=[], help='Neurons configuration')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs used in training')
+    parser.add_argument('--batch_size', type=int, default=5, help='How often to recalculate gradient')
     args = parser.parse_args()
 
     info(f"Loading data from {args.file_path}")
-    dataset = pandas.read_csv(args.file_path, args.delimiter)
+    dataset = pandas.read_csv(args.file_path, ";")
 
     info("Preview of data:")
     print(dataset.sample(2))
     info("Data file format info:")
     print(dataset.info())
 
-    DATA_SIZE = 30000      # -1 for full
-
     xSize, ySize = len(dataset.columns) - 1, 1
     xData = dataset.values[0:DATA_SIZE, :len(dataset.columns) - 1]
     yData = dataset.values[0:DATA_SIZE, len(dataset.columns) - 1]
 
+    # Normalize input data
     newxData = []
     for i in range(xSize):
         row = xData[0:, i]
@@ -231,11 +243,11 @@ def main():
 
     info("Setting up model")
     print(xSize, ySize, len(xData), len(yData))
-    model = Model(xSize, ySize, args.neurons, args.learn_rate)
+    nn = Model(xSize, ySize, args.neurons, args.learn_rate)
 
     info("Training...")
     info("(This might take a while - better get yourself a beer)")
-    results = model.train(newxData, yData, 100, 5, 0.7)
+    results = nn.train(newxData, yData, args.epochs, args.batch_size, VALIDATION_SPLIT)
 
     info("Dumping to file...")
     with open("results.csv", "w") as f:
