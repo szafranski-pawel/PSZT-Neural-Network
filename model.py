@@ -152,6 +152,7 @@ class Model:
             
             loss = np.mean(eachPartLoss)
             score = self.score(xValid, yValid)
+            self.TF(xValid, yValid)
             loss_on_val = self.verify(xValid, yValid)
             info(f"\t Done {currentEpoch}/{epochs} - score ({score}), loss ({loss}), loss_on_val ({loss_on_val})")
             results.append({
@@ -173,6 +174,22 @@ class Model:
     def score(self, input, correct):
         preds = self.predict(input)
         return scoreFunction(preds, correct)
+    
+    def TF(self, input, correct):
+        preds = self.predict(input)
+        predicted_vec = preds[0:, 0]
+        TP, TN, FP, FN = 0,0,0,0
+        for i in range(len(predicted_vec)):
+            if predicted_vec[i] > 0.5 and correct[i] == 1:
+                TP += 1
+            elif predicted_vec[i] > 0.5 and correct[i] == 0:
+                FP += 1
+            elif predicted_vec[i] <= 0.5 and correct[i] == 0:
+                TN += 1
+            elif predicted_vec[i] <= 0.5 and correct[i] == 1:
+                FN += 1
+        print('TP: {}, FP: {}, TN: {}, FN: {}'.format(TP,FP,TN,FN))
+        return
     
 
 ##############################
