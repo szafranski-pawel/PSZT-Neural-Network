@@ -32,7 +32,7 @@ class FullLayer:
     # Implementation of layer in which all nodes from previous layer are connected to every node in next layer
     def __init__(self, inputCnt, outputCnt, learnRate):
         self.weights = np.matrix([
-            [random.uniform(-1, 1) for _ in range(outputCnt)] for _ in range(inputCnt)
+            [random.uniform(0, 1) for _ in range(outputCnt)] for _ in range(inputCnt)
         ])
         # create vector of random biases
         self.biases = np.array([random.uniform(-1, 1) for _ in range(outputCnt)])
@@ -59,8 +59,8 @@ class HiddenActivationFunc:
         self.old_input = input
         return np.maximum(0, input)
     
-    def back(self, output):     
-        return output * (self.old_input > 0).T
+    def back(self, output):
+        return np.asarray(output) * np.asarray(self.old_input > 0)
 
 # Sigmoid
 class OutputActivationFunc:
@@ -145,6 +145,7 @@ class Model:
             
             loss = np.mean(eachPartLoss)
             score = self.score(xValid, yValid)
+            #print(xValid, self.predict(xValid), yValid)
             info(f"\t Done {currentEpoch}/{epochs} - score ({score}), loss ({loss})")
             results.append({
                 'loss': loss,
@@ -174,7 +175,7 @@ def main():
     parser.add_argument('--file_path', type=str, default='dane.csv', help='Path to training set')
     parser.add_argument('--delimiter', type=str, default=';', help='Path to training set')
     parser.add_argument('--learn_rate', type=float, default=0.9, help='Learn rate')
-    parser.add_argument('--neurons', type=int, nargs='+', default=[], help='Neurons configuration')
+    parser.add_argument('--neurons', type=int, nargs='+', default=[2], help='Neurons configuration')
     args = parser.parse_args()
 
     info(f"Loading data from {args.file_path}")
@@ -185,9 +186,11 @@ def main():
     info("Data file format info:")
     print(dataset.info())
 
+    DATA_SIZE = 10      # -1 for full
+
     xSize, ySize = len(dataset.columns) - 1, 1
-    xData = dataset.values[0:, :len(dataset.columns) - 1]
-    yData = dataset.values[0:, len(dataset.columns) - 1]
+    xData = dataset.values[0:DATA_SIZE, :len(dataset.columns) - 1]
+    yData = dataset.values[0:DATA_SIZE, len(dataset.columns) - 1]
 
     info("Setting up model")
     print(xSize, ySize, len(xData), len(yData))
@@ -195,8 +198,7 @@ def main():
 
     info("Training...")
     info("(This might take a while - better get yourself a beer)")
-    results = model.train(xData, yData, 100, 5, 0.2)
-    print(results)
+    results = model.train(xData, yData, 100, 5, 0.1)
 
 if __name__ == "__main__":
     main()
